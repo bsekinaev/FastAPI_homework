@@ -1,15 +1,15 @@
-
 # FastAPI Ads API
 
 Сервис объявлений купли/продажи, реализованный на **FastAPI** с асинхронной базой данных SQLite.  
 Докеризирован, готов к запуску в контейнере.
 
 ## 🚀 Возможности
-- Создание объявления (`POST /advertisement`)
+- Создание объявления (`POST /advertisement/`)
 - Обновление объявления (`PATCH /advertisement/{id}`)
 - Удаление объявления (`DELETE /advertisement/{id}`)
 - Получение объявления по ID (`GET /advertisement/{id}`)
-- Поиск объявлений по полям (`GET /advertisement?title=&author=&price_min=&price_max=`)
+- Поиск объявлений с **пагинацией** и фильтрацией (`GET /advertisement/?title=&author=&price_min=&price_max=&limit=&offset=`)
+- В ответе на поиск возвращаются: `items`, `total`, `limit`, `offset`, `next`, `prev` (ссылки для навигации)
 
 ## 🛠 Технологии
 - FastAPI
@@ -22,13 +22,17 @@
 
 ```
 FastAPI_homework/
-├── app.py              # Основное приложение (роуты)
-├── models.py           # SQLAlchemy и Pydantic модели
+├── app.py              # Точка входа
 ├── database.py         # Подключение к БД
-├── requirements.txt    # Зависимости
-├── Dockerfile          # Инструкция для Docker
-├── .gitignore          # Игнорируемые файлы
-└── README.md           # Документация
+├── models.py           # SQLAlchemy модель
+├── schemas.py          # Pydantic схемы
+├── routers/
+│   ├── __init__.py
+│   └── advertisement.py # Все эндпоинты
+├── requirements.txt
+├── Dockerfile
+├── .gitignore
+└── README.md
 ```
 
 ## 📦 Установка и запуск (локально)
@@ -75,7 +79,7 @@ FastAPI_homework/
 
 ```bash
 # Создать объявление
-curl -X POST "http://localhost:8000/advertisement" \
+curl -X POST "http://localhost:8000/advertisement/" \
   -H "Content-Type: application/json" \
   -d '{"title":"Велосипед","description":"Горный велосипед","price":15000,"author":"Иван"}'
 
@@ -87,10 +91,9 @@ curl -X PATCH "http://localhost:8000/advertisement/1" \
   -H "Content-Type: application/json" \
   -d '{"price":14000}'
 
-# Поиск по автору и цене
-curl "http://localhost:8000/advertisement?author=%D0%98%D0%B2%D0%B0%D0%BD&price_min=10000"
+# Поиск с пагинацией (первые 5 записей, начиная с 0)
+curl "http://localhost:8000/advertisement/?author=Иван&price_min=10000&limit=5&offset=0"
 
 # Удалить объявление
-curl -X DELETE "http://localhost:8000/advertisement/1" -v
+curl -X DELETE "http://localhost:8000/advertisement/1"
 ```
-
