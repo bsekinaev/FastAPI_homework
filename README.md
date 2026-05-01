@@ -1,36 +1,58 @@
 # FastAPI Ads API
 
-Сервис объявлений купли/продажи, реализованный на **FastAPI** с асинхронной базой данных SQLite.  
-Докеризирован, готов к запуску в контейнере.
+Сервис объявлений купли/продажи с аутентификацией, ролями (`USER`/`ADMIN`) и разграничением прав.  
+Реализован на **FastAPI** с асинхронной SQLite, JWT, пагинацией. Докеризирован.
 
 ## 🚀 Возможности
-- Создание объявления (`POST /advertisement/`)
-- Обновление объявления (`PATCH /advertisement/{id}`)
-- Удаление объявления (`DELETE /advertisement/{id}`)
-- Получение объявления по ID (`GET /advertisement/{id}`)
-- Поиск объявлений с **пагинацией** и фильтрацией (`GET /advertisement/?title=&author=&price_min=&price_max=&limit=&offset=`)
-- В ответе на поиск возвращаются: `items`, `total`, `limit`, `offset`, `next`, `prev` (ссылки для навигации)
+
+### Пользователи и авторизация
+- Регистрация `POST /user/` (доступно всем)
+- Авторизация `POST /auth/login` (JWT, срок действия 48 часов)
+- Просмотр профиля `GET /user/{id}` (доступно всем)
+- Список всех пользователей `GET /user/` (только `ADMIN`)
+- Обновление/удаление своего профиля `PATCH /user/{id}`, `DELETE /user/{id}`
+- Администратор может обновлять/удалять любого пользователя
+
+### Объявления
+- Создание `POST /advertisement/` (только авторизованные)
+- Получение по ID `GET /advertisement/{id}` (доступно всем)
+- Обновление/удаление своего объявления (`PATCH`, `DELETE`)
+- Администратор может изменять/удалять любые объявления
+- Поиск с **пагинацией** и фильтрацией:
+  - по заголовку (`title`)
+  - по имени автора (`author_username`)
+  - по диапазону цен (`price_min`, `price_max`)
+  - параметры `limit` (макс. 100), `offset`
+  - ответ содержит `items`, `total`, `limit`, `offset`, `next`, `prev`
 
 ## 🛠 Технологии
+
 - FastAPI
-- SQLAlchemy (async)
+- SQLAlchemy 2.0 (async)
 - aiosqlite
+- python-jose (JWT)
+- passlib (хэширование)
 - Uvicorn
 - Docker
+- python-dotenv
 
 ## 📁 Структура проекта
 
 ```
 FastAPI_homework/
-├── app.py              # Точка входа
-├── database.py         # Подключение к БД
-├── models.py           # SQLAlchemy модель
-├── schemas.py          # Pydantic схемы
+├── app.py                  # Точка входа
+├── database.py             # Подключение к БД
+├── models.py               # SQLAlchemy модели (User, Advertisement)
+├── schemas.py              # Pydantic схемы
+├── security.py             # JWT, хэширование, зависимости
 ├── routers/
 │   ├── __init__.py
-│   └── advertisement.py # Все эндпоинты
+│   ├── auth.py             # POST /auth/login
+│   ├── user.py             # CRUD пользователей
+│   └── advertisement.py    # CRUD объявлений + поиск
 ├── requirements.txt
 ├── Dockerfile
+├── .env.example
 ├── .gitignore
 └── README.md
 ```
@@ -55,11 +77,24 @@ FastAPI_homework/
    pip install -r requirements.txt
    ```
 
-4. **Запустите приложение**
+4. **Настройте переменные окружения**
+   Скопируйте `.env.example` в `.env` и при необходимости измените секретный ключ:
+   ```bash
+   cp .env.example .env
+   ```
+   Содержимое `.env`:
+   ```ini
+   SECRET_KEY=super_secret
+   ALGORITHM=HS256
+   ACCESS_TOKEN_EXPIRE_HOURS=48
+   DATABASE_URL=sqlite+aiosqlite:///./ads.db
+   ```
+
+5. **Запустите приложение**
    ```bash
    uvicorn app:app --reload --host 0.0.0.0 --port 8000
    ```
-   API будет доступно по адресу `http://localhost:8000`, документация – `http://localhost:8000/docs`.
+   API документация: `http://localhost:8000/docs`
 
 ## 🐳 Запуск через Docker
 
@@ -70,30 +105,70 @@ FastAPI_homework/
 
 2. **Запустите контейнер**
    ```bash
-   docker run -p 8000:8000 fastapi-ads
+   docker run -p 8000:8000 --env-file .env fastapi-ads
    ```
-
-После запуска Swagger‑документация будет доступна по `http://localhost:8000/docs`.
 
 ## 🧪 Тестирование API (примеры cURL)
 
+### Регистрация и логин
 ```bash
-# Создать объявление
-curl -X POST "http://localhost:8000/advertisement/" \
+# Создать пользователя
+curl -X POST "http://localhost:8000/user/" \
   -H "Content-Type: application/json" \
-  -d '{"title":"Велосипед","description":"Горный велосипед","price":15000,"author":"Иван"}'
+  -d '{"username":"user1","password":"user123"}'
 
-# Получить объявление по id
+# Получить JWT-токен
+curl -X POST "http://localhost:8000/auth/login" \
+  -H "Content-Type: application/json" \
+  -d '{"username":"user1","password":"user123"}'
+# В ответе будет {"access_token":"...","token_type":"bearer"}
+```
+
+### Создание объявления (требуется токен)
+```bash
+TOKEN="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+curl -X POST "http://localhost:8000/advertisement/" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"title":"Велосипед","description":"Горный","price":15000}'
+```
+
+### Получение объявления (без токена)
+```bash
 curl "http://localhost:8000/advertisement/1"
+```
 
-# Обновить цену
+### Поиск с пагинацией и фильтром по автору
+```bash
+curl "http://localhost:8000/advertisement/?author_username=user1&limit=5&offset=0"
+```
+
+### Обновление своего объявления
+```bash
 curl -X PATCH "http://localhost:8000/advertisement/1" \
+  -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"price":14000}'
-
-# Поиск с пагинацией (первые 5 записей, начиная с 0)
-curl "http://localhost:8000/advertisement/?author=Иван&price_min=10000&limit=5&offset=0"
-
-# Удалить объявление
-curl -X DELETE "http://localhost:8000/advertisement/1"
 ```
+
+### Администратор: список всех пользователей
+```bash
+# Под администратором создаётся автоматически при запуске (логин: admin, пароль: admin)
+ADMIN_TOKEN="..."
+curl -X GET "http://localhost:8000/user/" \
+  -H "Authorization: Bearer $ADMIN_TOKEN"
+```
+
+### Удаление объявления
+```bash
+curl -X DELETE "http://localhost:8000/advertisement/1" \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+## ⚙️ Примечания
+
+- При первом запуске автоматически создаётся пользователь `admin` с паролем `admin` и ролью `ADMIN`.
+- Пароли хэшируются (используется `sha256_crypt`).
+- Токен истекает через 48 часов.
+- При недостатке прав или отсутствии токена возвращаются коды `401` или `403`.
+- Все эндпоинты полностью асинхронны.
