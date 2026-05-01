@@ -5,7 +5,7 @@ from typing import Optional
 from database import get_db
 from models import Advertisement, User, UserRole
 from schemas import AdCreate, AdUpdate, AdResponse, PaginatedAdsResponse
-from security import get_current_user, get_current_user_or_none
+from security import get_current_user
 
 router = APIRouter(prefix='/advertisement',tags=['advertisements'])
 

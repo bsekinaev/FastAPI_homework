@@ -45,7 +45,7 @@ async def get_current_user(
     token = credentials.credentials
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        user_id: int = payload.get("sub")
+        user_id = int(payload.get("sub"))
         if user_id is None:
             raise HTTPException(status_code=401, detail="Неверный токен")
     except JWTError:
@@ -55,14 +55,3 @@ async def get_current_user(
     if user is None:
         raise HTTPException(status_code=401, detail="Пользователь не найден")
     return user
-
-async def get_current_user_or_none(
-    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
-    db: AsyncSession = Depends(get_db)
-) -> Optional[User]:
-    if credentials is None:
-        return None
-    try:
-        return await get_current_user(credentials, db)
-    except HTTPException:
-        return None
